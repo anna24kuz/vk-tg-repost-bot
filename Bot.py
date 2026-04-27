@@ -18,7 +18,7 @@ import sqlite3
 import asyncio
 
 # Укажите токен вашего бота-посредника
-BOT_TOKEN = 'YOUR_BOT_TOKEN'  # Замените на ваш токен
+BOT_TOKEN = '8516690865:AAHAQfxmWGone0UX5K9Pdckp0ebaAG7aANY'  # Замените на ваш токен
 
 # Настройка логирования
 logging.basicConfig(

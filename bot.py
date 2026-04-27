@@ -15,13 +15,13 @@ if not VK_TOKEN:
     print("❌ ERROR: VK_API_TOKEN secret is not set!")
     sys.exit(1)
 else:
-    print("✅ VK_API_TOKEN found.")
+    print(f"✅ VK_API_TOKEN found (first 10 chars: {VK_TOKEN[:10]}...)")
 
 if not TG_BOT_TOKEN:
     print("❌ ERROR: TG_BOT_TOKEN secret is not set!")
     sys.exit(1)
 else:
-    print("✅ TG_BOT_TOKEN found.")
+    print(f"✅ TG_BOT_TOKEN found (first 10 chars: {TG_BOT_TOKEN[:10]}...)")
 
 if not CHANNEL_ID:
     print("❌ ERROR: CHANNEL_ID secret is not set!")

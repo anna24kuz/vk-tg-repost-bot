@@ -3,7 +3,7 @@ name: VK to Telegram Reposter
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '0 */30 * * *'
 
 jobs:
   repost:

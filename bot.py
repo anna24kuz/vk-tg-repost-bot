@@ -10,18 +10,17 @@ TG_BOT_TOKEN = os.environ.get('TG_BOT_TOKEN')
 CHANNEL_ID = os.environ.get('CHANNEL_ID')
 SOURCE_GROUP = os.environ.get('SOURCE_GROUP')
 
-# Проверяем, найдены ли все переменные
 if not VK_TOKEN:
     print("❌ ERROR: VK_API_TOKEN secret is not set!")
     sys.exit(1)
 else:
-    print(f"✅ VK_API_TOKEN found (first 10 chars: {VK_TOKEN[:10]}...)")
+    print("✅ VK_API_TOKEN found.")
 
 if not TG_BOT_TOKEN:
     print("❌ ERROR: TG_BOT_TOKEN secret is not set!")
     sys.exit(1)
 else:
-    print(f"✅ TG_BOT_TOKEN found (first 10 chars: {TG_BOT_TOKEN[:10]}...)")
+    print("✅ TG_BOT_TOKEN found.")
 
 if not CHANNEL_ID:
     print("❌ ERROR: CHANNEL_ID secret is not set!")
@@ -35,13 +34,28 @@ if not SOURCE_GROUP:
 else:
     print(f"✅ SOURCE_GROUP found: {SOURCE_GROUP}")
 
-# --- 2. ПОЛУЧАЕМ ПОСТ ИЗ VK ---
-print(f"\n--- Trying to get last post from VK group '{SOURCE_GROUP}' ---")
+# --- 2. ФАЙЛ ДЛЯ ХРАНЕНИЯ ИСТОРИИ ОТПРАВЛЕННЫХ ПОСТОВ ---
+HISTORY_FILE = "sent_posts.txt"
+
+def load_sent_posts():
+    """Загружает ID уже отправленных постов из файла"""
+    if not os.path.exists(HISTORY_FILE):
+        return set()
+    with open(HISTORY_FILE, "r") as f:
+        return set(line.strip() for line in f if line.strip())
+
+def save_sent_post(post_id):
+    """Сохраняет ID отправленного поста в файл"""
+    with open(HISTORY_FILE, "a") as f:
+        f.write(f"{post_id}\n")
+
+# --- 3. ПОЛУЧАЕМ ПОСТЫ ИЗ VK (до 5 последних) ---
+print(f"\n--- Getting recent posts from VK group '{SOURCE_GROUP}' ---")
 url = 'https://api.vk.com/method/wall.get'
 params = {
     'access_token': VK_TOKEN,
     'domain': SOURCE_GROUP,
-    'count': 1,
+    'count': 5,  # Проверяем последние 5 постов
     'v': '5.131'
 }
 
@@ -49,7 +63,7 @@ try:
     response = requests.get(url, params=params)
     response.raise_for_status()
     vk_data = response.json()
-    print(f"VK API response received.")
+    print("VK API response received.")
 
     if 'error' in vk_data:
         print(f"❌ VK API Error: {vk_data['error'].get('error_msg', 'Unknown error')}")
@@ -57,36 +71,60 @@ try:
 
     items = vk_data.get('response', {}).get('items', [])
     if not items:
-        print(f"ℹ️ No posts found in the group '{SOURCE_GROUP}'. Nothing to send.")
+        print(f"ℹ️ No posts found in the group '{SOURCE_GROUP}'.")
         sys.exit(0)
 
-    post = items[0]
-    print(f"✅ Post found! Post ID: {post['id']}")
+    # Загружаем историю уже отправленных постов
+    sent_posts = load_sent_posts()
+    print(f"📋 Already sent posts: {len(sent_posts)}")
 
-    post_text = post.get('text', '')
-    if not post_text:
-        post_text = "[Этот пост не содержит текста]"
-    else:
-        if len(post_text) > 500:
-            post_text = post_text[:500] + "..."
+    # Ищем новые посты (игнорируем закреплённые)
+    new_posts = []
+    for post in items:
+        if post.get('is_pinned', False):
+            print(f"⏸️ Skipping pinned post ID: {post['id']}")
+            continue
+        if str(post['id']) not in sent_posts:
+            new_posts.append(post)
+        else:
+            print(f"⏸️ Post ID {post['id']} already sent, skipping.")
 
-    # --- 3. ОТПРАВЛЯЕМ ПОСТ В TELEGRAM ---
-    print(f"\n--- Trying to send post to Telegram channel {CHANNEL_ID} ---")
-    send_url = f'https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage'
-    message_text = f"<b>Новый пост из VK!</b>\n\n{post_text}"
-    
-    post_link = f"https://vk.com/{SOURCE_GROUP}?w=wall{post['owner_id']}_{post['id']}"
-    message_text += f"\n\n<a href='{post_link}'>Читать на сайте VK</a>"
+    if not new_posts:
+        print("ℹ️ No new posts found.")
+        sys.exit(0)
 
-    send_data = {
-        'chat_id': CHANNEL_ID,
-        'text': message_text,
-        'parse_mode': 'HTML'
-    }
+    print(f"🆕 Found {len(new_posts)} new post(s)!")
 
-    tg_response = requests.post(send_url, data=send_data)
-    tg_response.raise_for_status()
-    print("✅ Message sent to Telegram successfully!")
+    # --- 4. ОТПРАВЛЯЕМ НОВЫЕ ПОСТЫ В TELEGRAM ---
+    for post in reversed(new_posts):  # Отправляем в хронологическом порядке (старые первыми)
+        post_id = post['id']
+        post_text = post.get('text', '')
+        if not post_text:
+            post_text = "[Пост без текста]"
+        else:
+            if len(post_text) > 500:
+                post_text = post_text[:500] + "..."
+
+        print(f"\n--- Sending post ID {post_id} to Telegram ---")
+        
+        send_url = f'https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage'
+        message_text = f"<b>🆕 Новый пост!</b>\n\n{post_text}"
+        
+        post_link = f"https://vk.com/{SOURCE_GROUP}?w=wall{post['owner_id']}_{post_id}"
+        message_text += f"\n\n<a href='{post_link}'>Читать на сайте VK</a>"
+
+        send_data = {
+            'chat_id': CHANNEL_ID,
+            'text': message_text,
+            'parse_mode': 'HTML'
+        }
+
+        tg_response = requests.post(send_url, data=send_data)
+        tg_response.raise_for_status()
+        print(f"✅ Post ID {post_id} sent successfully!")
+
+        # Сохраняем ID отправленного поста
+        save_sent_post(post_id)
 
 except requests.exceptions.RequestException as e:
     print(f"❌ Network or request error: {e}")

@@ -3,7 +3,7 @@ name: VK to Telegram Reposter
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */4 * * *"
+    - cron: '0 */4 * * *'
 
 jobs:
   repost:
@@ -13,4 +13,4 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Run reposter
-        run: echo "Тест: workflow работает"
+        run: echo "Тест"

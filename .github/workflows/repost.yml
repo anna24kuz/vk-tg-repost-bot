@@ -12,5 +12,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install vk_api python-telegram-bot
+      
       - name: Run reposter
-        run: echo "Тест"
+        env:
+          VK_TOKEN: ${{ secrets.VK_API_TOKEN }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          SOURCE_GROUP: ${{ secrets.SOURCE_GROUP }}
+        run: python bot.py

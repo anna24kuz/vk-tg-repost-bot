@@ -134,3 +134,4 @@ except Exception as e:
     sys.exit(1)
 
 print("\n--- Bot script finished successfully ---")
+chore: restart workflows

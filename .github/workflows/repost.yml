@@ -28,3 +28,5 @@ jobs:
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           SOURCE_GROUP: ${{ secrets.SOURCE_GROUP }}
         run: python bot.py
+
+        # test resync

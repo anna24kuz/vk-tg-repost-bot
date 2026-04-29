@@ -39,24 +39,22 @@ else:
 HISTORY_FILE = "sent_posts.txt"
 
 def load_sent_posts():
-    """Загружает ID уже отправленных постов из файла"""
     if not os.path.exists(HISTORY_FILE):
         return set()
     with open(HISTORY_FILE, "r") as f:
         return set(line.strip() for line in f if line.strip())
 
 def save_sent_post(post_id):
-    """Сохраняет ID отправленного поста в файл"""
     with open(HISTORY_FILE, "a") as f:
         f.write(f"{post_id}\n")
 
-# --- 3. ПОЛУЧАЕМ ПОСТЫ ИЗ VK (до 5 последних) ---
+# --- 3. ПОЛУЧАЕМ ПОСТЫ ИЗ VK (последние 10) ---
 print(f"\n--- Getting recent posts from VK group '{SOURCE_GROUP}' ---")
 url = 'https://api.vk.com/method/wall.get'
 params = {
     'access_token': VK_TOKEN,
     'domain': SOURCE_GROUP,
-    'count': 5,  # Проверяем последние 5 постов
+    'count': 5,
     'v': '5.131'
 }
 
@@ -79,12 +77,11 @@ try:
     sent_posts = load_sent_posts()
     print(f"📋 Already sent posts: {len(sent_posts)}")
 
-    # Текущее время в секундах (UTC)
+    # Текущее время (UTC)
     current_time = int(time.time())
-    # Посты старше этого количества секунд будут игнорироваться (3 часа = 21600 секунд)
     MAX_POST_AGE_SECONDS = 10800  # 3 часа
 
-    # Ищем новые посты (не отправленные и не старше 3 часов)
+    # Отбираем новые посты
     new_posts = []
     for post in items:
         if post.get('is_pinned', False):
@@ -96,7 +93,7 @@ try:
             print(f"⏸️ Post ID {post_id} already sent, skipping.")
             continue
         
-        # Проверяем возраст поста
+        # Проверяем, не слишком ли старый пост
         post_date = post['date']
         post_age_seconds = current_time - post_date
         if post_age_seconds > MAX_POST_AGE_SECONDS:
@@ -106,7 +103,47 @@ try:
         new_posts.append(post)
 
     if not new_posts:
-        print("ℹ️ No new posts found.")
+        print("ℹ️ No new posts found within the last 3 hours.")
         sys.exit(0)
 
     print(f"🆕 Found {len(new_posts)} new post(s)!")
+
+    # --- 4. ОТПРАВЛЯЕМ НОВЫЕ ПОСТЫ В TELEGRAM ---
+    for post in reversed(new_posts):  # Отправляем в хронологическом порядке
+        post_id = post['id']
+        post_text = post.get('text', '')
+        if not post_text:
+            post_text = "[Пост без текста]"
+        else:
+            if len(post_text) > 500:
+                post_text = post_text[:500] + "..."
+
+        print(f"\n--- Sending post ID {post_id} to Telegram ---")
+        
+        send_url = f'https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage'
+        message_text = f"<b>🆕 Новый пост!</b>\n\n{post_text}"
+        
+        post_link = f"https://vk.com/{SOURCE_GROUP}?w=wall{post['owner_id']}_{post_id}"
+        message_text += f"\n\n<a href='{post_link}'>Читать на сайте VK</a>"
+
+        send_data = {
+            'chat_id': CHANNEL_ID,
+            'text': message_text,
+            'parse_mode': 'HTML'
+        }
+
+        tg_response = requests.post(send_url, data=send_data)
+        tg_response.raise_for_status()
+        print(f"✅ Post ID {post_id} sent successfully!")
+
+        # Сохраняем ID отправленного поста
+        save_sent_post(post_id)
+
+except requests.exceptions.RequestException as e:
+    print(f"❌ Network or request error: {e}")
+    sys.exit(1)
+except Exception as e:
+    print(f"❌ An unexpected error occurred: {e}")
+    sys.exit(1)
+
+print("\n--- Bot script finished successfully ---")

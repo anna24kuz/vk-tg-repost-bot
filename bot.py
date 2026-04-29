@@ -1,6 +1,7 @@
 import os
 import requests
 import sys
+import time
 
 # --- 1. ПРОВЕРКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ---
 print("--- Starting bot script ---")
@@ -78,59 +79,34 @@ try:
     sent_posts = load_sent_posts()
     print(f"📋 Already sent posts: {len(sent_posts)}")
 
-    # Ищем новые посты (игнорируем закреплённые)
+    # Текущее время в секундах (UTC)
+    current_time = int(time.time())
+    # Посты старше этого количества секунд будут игнорироваться (6 часов = 21600 секунд)
+    MAX_POST_AGE_SECONDS = 21600  # 6 часов
+
+    # Ищем новые посты (не отправленные и не старше 6 часов)
     new_posts = []
     for post in items:
         if post.get('is_pinned', False):
             print(f"⏸️ Skipping pinned post ID: {post['id']}")
             continue
-        if str(post['id']) not in sent_posts:
-            new_posts.append(post)
-        else:
-            print(f"⏸️ Post ID {post['id']} already sent, skipping.")
+        
+        post_id = str(post['id'])
+        if post_id in sent_posts:
+            print(f"⏸️ Post ID {post_id} already sent, skipping.")
+            continue
+        
+        # Проверяем возраст поста
+        post_date = post['date']
+        post_age_seconds = current_time - post_date
+        if post_age_seconds > MAX_POST_AGE_SECONDS:
+            print(f"⏸️ Post ID {post_id} is too old ({post_age_seconds // 3600} hours), skipping.")
+            continue
+        
+        new_posts.append(post)
 
     if not new_posts:
         print("ℹ️ No new posts found.")
         sys.exit(0)
 
     print(f"🆕 Found {len(new_posts)} new post(s)!")
-
-    # --- 4. ОТПРАВЛЯЕМ НОВЫЕ ПОСТЫ В TELEGRAM ---
-    for post in reversed(new_posts):  # Отправляем в хронологическом порядке (старые первыми)
-        post_id = post['id']
-        post_text = post.get('text', '')
-        if not post_text:
-            post_text = "[Пост без текста]"
-        else:
-            if len(post_text) > 500:
-                post_text = post_text[:500] + "..."
-
-        print(f"\n--- Sending post ID {post_id} to Telegram ---")
-        
-        send_url = f'https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage'
-        message_text = f"<b>🆕 Новый пост!</b>\n\n{post_text}"
-        
-        post_link = f"https://vk.com/{SOURCE_GROUP}?w=wall{post['owner_id']}_{post_id}"
-        message_text += f"\n\n<a href='{post_link}'>Читать на сайте VK</a>"
-
-        send_data = {
-            'chat_id': CHANNEL_ID,
-            'text': message_text,
-            'parse_mode': 'HTML'
-        }
-
-        tg_response = requests.post(send_url, data=send_data)
-        tg_response.raise_for_status()
-        print(f"✅ Post ID {post_id} sent successfully!")
-
-        # Сохраняем ID отправленного поста
-        save_sent_post(post_id)
-
-except requests.exceptions.RequestException as e:
-    print(f"❌ Network or request error: {e}")
-    sys.exit(1)
-except Exception as e:
-    print(f"❌ An unexpected error occurred: {e}")
-    sys.exit(1)
-
-print("\n--- Bot script finished successfully ---")
